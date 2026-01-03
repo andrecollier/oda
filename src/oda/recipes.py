@@ -31,6 +31,7 @@ class OdaRecipeScraper:
         self.browser = None
         self.context = None
         self.page: Page | None = None
+        self._is_logged_in = False
 
     async def __aenter__(self):
         """Context manager entry - start browser."""
@@ -70,6 +71,9 @@ class OdaRecipeScraper:
         """
         if not self.page:
             raise RuntimeError("Browser not started. Call start() first.")
+
+        if self._is_logged_in:
+            return True
 
         try:
             # Go directly to login page
@@ -126,6 +130,7 @@ class OdaRecipeScraper:
                 'a[href*="account"], button:has-text("Min konto")'
             ).count() > 0
 
+            self._is_logged_in = is_logged_in
             return is_logged_in
 
         except Exception as e:
