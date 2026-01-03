@@ -390,7 +390,7 @@ class OdaCartManager:
             await self.login()
 
         # Navigate to cart
-        cart_url = f"{self.BASE_URL}/checkout/cart"
+        cart_url = f"{self.BASE_URL}/cart/"
         await self.page.goto(cart_url, wait_until="networkidle")
 
         if pause:
