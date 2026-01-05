@@ -14,7 +14,7 @@ from mcp.types import Tool, TextContent
 
 from src.config import settings
 from src.kassal import KassalClient, ProductSearchParams
-from src.oda import OdaRecipeScraper, OdaCartManager, Recipe
+from src.oda import OdaRecipeScraper, OdaCartManager, OdaOrderScraper, Recipe
 from src.database import Database
 from src.optimizer import MealOptimizer
 
@@ -304,6 +304,72 @@ async def list_tools() -> list[Tool]:
                 "required": ["recipe_url"],
             },
         ),
+        Tool(
+            name="scrape_order_history",
+            description="Scrape all historical orders from Oda account (https://oda.com/no/account/orders/). "
+            "Analyzes purchase history going back to 2017. Used to identify recurring items and predict stock needs.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "max_orders": {
+                        "type": "integer",
+                        "default": 100,
+                        "description": "Maximum number of orders to scrape (default: 100)",
+                    }
+                },
+            },
+        ),
+        Tool(
+            name="analyze_recurring_items",
+            description="Analyze order history to identify items that are purchased regularly (faste varer). "
+            "Calculates purchase frequency, predicts when items will run out, and identifies patterns.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "min_purchases": {
+                        "type": "integer",
+                        "default": 3,
+                        "description": "Minimum purchases to be considered recurring (default: 3)",
+                    }
+                },
+            },
+        ),
+        Tool(
+            name="get_recurring_items",
+            description="Get list of regularly purchased items (faste varer) with purchase frequency and predictions.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "limit": {"type": "integer", "default": 50},
+                },
+            },
+        ),
+        Tool(
+            name="get_low_stock_warnings",
+            description="Get items predicted to run out soon based on purchase history. "
+            "Helps ensure you don't run out of essentials like milk, bread, toothpaste, etc.",
+            inputSchema={"type": "object", "properties": {}},
+        ),
+        Tool(
+            name="add_recurring_to_shopping_list",
+            description="Automatically add recurring items (faste varer) to current shopping list. "
+            "Can add all low-stock items or specific items by name.",
+            inputSchema={
+                "type": "object",
+                "properties": {
+                    "low_stock_only": {
+                        "type": "boolean",
+                        "default": True,
+                        "description": "Only add items predicted to run out soon (default: True)",
+                    },
+                    "product_names": {
+                        "type": "array",
+                        "items": {"type": "string"},
+                        "description": "Optional: specific product names to add",
+                    },
+                },
+            },
+        ),
     ]
 
 
@@ -391,6 +457,14 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
                     if recipe.protein_per_serving:
                         output += f"  Protein: {recipe.protein_per_serving}g/serving\n"
                     output += f"  Vegetables: {', '.join(recipe.main_vegetables)}\n"
+
+                    # Add intelligent suggestions for sides and drinks
+                    suggestions = recipe.suggest_sides_and_drinks()
+                    if suggestions.get('sides'):
+                        output += f"  Forslag tilbehør: {', '.join(suggestions['sides'])}\n"
+                    if suggestions.get('drinks'):
+                        output += f"  Forslag drikke: {', '.join(suggestions['drinks'])}\n"
+
                     output += f"  URL: {recipe.url}\n\n"
 
                 return [TextContent(type="text", text=output)]
@@ -706,6 +780,163 @@ async def call_tool(name: str, arguments: Any) -> list[TextContent]:
             output = f"✅ Recipe {recipe_id} rated {'⭐' * rating} ({rating}/5)"
             if notes:
                 output += f"\n📝 Notes saved: {notes}"
+
+            return [TextContent(type="text", text=output)]
+
+        elif name == "scrape_order_history":
+            max_orders = arguments.get("max_orders", 100)
+
+            async with OdaOrderScraper(
+                settings.oda_email, settings.oda_password, settings.headless_browser
+            ) as scraper:
+                await scraper.login()
+                orders = await scraper.scrape_orders(max_orders=max_orders)
+
+                # Save orders to database
+                saved_count = 0
+                for order in orders:
+                    db.save_order(order)
+                    saved_count += 1
+
+                output = f"✅ Successfully scraped and saved {saved_count} orders!\n\n"
+                output += f"Total orders found: {len(orders)}\n"
+                output += f"Date range: {orders[-1]['order_date'].strftime('%Y-%m-%d') if orders and orders[-1]['order_date'] else 'N/A'} "
+                output += f"to {orders[0]['order_date'].strftime('%Y-%m-%d') if orders and orders[0]['order_date'] else 'N/A'}\n\n"
+                output += f"Next step: Run 'analyze_recurring_items' to identify your faste varer!"
+
+                return [TextContent(type="text", text=output)]
+
+        elif name == "analyze_recurring_items":
+            min_purchases = arguments.get("min_purchases", 3)
+
+            recurring_items = db.analyze_recurring_items(min_purchases=min_purchases)
+
+            if not recurring_items:
+                return [TextContent(type="text", text="No recurring items found. Try lowering min_purchases or scrape more order history.")]
+
+            output = f"📊 Identified {len(recurring_items)} recurring items (faste varer):\n\n"
+
+            # Group by category (heuristic)
+            categorized = {"Dairy": [], "Bread": [], "Household": [], "Other": []}
+
+            for item in recurring_items[:20]:  # Show top 20
+                product_lower = item.product_name.lower()
+                if any(word in product_lower for word in ['melk', 'yoghurt', 'ost', 'smør']):
+                    category = "Dairy"
+                elif any(word in product_lower for word in ['brød', 'loff', 'rundstykker']):
+                    category = "Bread"
+                elif any(word in product_lower for word in ['såpe', 'shampo', 'tannkrem', 'papir']):
+                    category = "Household"
+                else:
+                    category = "Other"
+
+                categorized[category].append(item)
+
+            for category, items in categorized.items():
+                if items:
+                    output += f"\n{category}:\n"
+                    for item in items[:10]:
+                        output += f"  • {item.product_name}\n"
+                        output += f"    Purchased {item.purchase_count} times | Avg every {int(item.avg_days_between_purchase)} days\n"
+                        if item.is_low_stock_warning:
+                            output += f"    ⚠️ LOW STOCK: Predicted to need soon!\n"
+
+            output += f"\n\n💡 Use 'get_low_stock_warnings' to see items running low!"
+            output += f"\n💡 Use 'add_recurring_to_shopping_list' to auto-add to your list!"
+
+            return [TextContent(type="text", text=output)]
+
+        elif name == "get_recurring_items":
+            limit = arguments.get("limit", 50)
+            items = db.get_recurring_items(limit=limit)
+
+            if not items:
+                return [TextContent(type="text", text="No recurring items found. Run 'analyze_recurring_items' first!")]
+
+            output = f"📦 Your Recurring Items (Faste Varer):\n\n"
+            for item in items:
+                output += f"- {item.product_name}\n"
+                output += f"  Purchased: {item.purchase_count} times\n"
+                output += f"  Frequency: Every {int(item.avg_days_between_purchase)} days\n"
+                output += f"  Last bought: {item.last_purchase.strftime('%Y-%m-%d') if item.last_purchase else 'Unknown'}\n"
+
+                if item.next_predicted_purchase:
+                    days_until = (item.next_predicted_purchase - datetime.now()).days
+                    output += f"  Next purchase predicted: in {days_until} days"
+                    if item.is_low_stock_warning:
+                        output += " ⚠️ SOON!"
+                    output += "\n"
+
+                output += "\n"
+
+            return [TextContent(type="text", text=output)]
+
+        elif name == "get_low_stock_warnings":
+            items = db.get_low_stock_items()
+
+            if not items:
+                return [TextContent(type="text", text="✅ No low stock warnings! All your recurring items are well-stocked.")]
+
+            output = f"⚠️ Low Stock Warnings - {len(items)} items need attention:\n\n"
+            for item in items:
+                days_until = (item.next_predicted_purchase - datetime.now()).days
+                output += f"🔴 {item.product_name}\n"
+                output += f"   Last purchased: {item.last_purchase.strftime('%Y-%m-%d') if item.last_purchase else 'Unknown'}\n"
+                output += f"   Predicted need: in {days_until} days\n"
+                output += f"   Typical purchase: Every {int(item.avg_days_between_purchase)} days\n\n"
+
+            output += f"\n💡 Add these to your shopping list with 'add_recurring_to_shopping_list'!"
+
+            return [TextContent(type="text", text=output)]
+
+        elif name == "add_recurring_to_shopping_list":
+            low_stock_only = arguments.get("low_stock_only", True)
+            product_names = arguments.get("product_names")
+
+            now = datetime.now()
+            week_number = now.isocalendar()[1]
+            year = now.year
+
+            # Get items to add
+            if product_names:
+                # Add specific items
+                items_to_add = []
+                for name in product_names:
+                    item = db.get_session().query(db.RecurringItem).filter(
+                        func.lower(db.RecurringItem.product_name) == name.lower()
+                    ).first()
+                    if item:
+                        items_to_add.append(item)
+            elif low_stock_only:
+                # Add only low stock items
+                items_to_add = db.get_low_stock_items()
+            else:
+                # Add all recurring items with auto_add enabled
+                items_to_add = [
+                    item for item in db.get_recurring_items(limit=100)
+                    if item.auto_add_to_list
+                ]
+
+            if not items_to_add:
+                return [TextContent(type="text", text="No items to add. Either no low stock items found or no items selected.")]
+
+            # Add to shopping list
+            added_count = 0
+            for item in items_to_add:
+                db.add_to_shopping_list(
+                    name=item.product_name,
+                    quantity=f"{item.preferred_quantity or item.typical_quantity} stk",
+                    week_number=week_number,
+                    year=year,
+                    category="Faste varer"
+                )
+                added_count += 1
+
+            output = f"✅ Added {added_count} recurring items to shopping list (Week {week_number}):\n\n"
+            for item in items_to_add[:20]:
+                output += f"  • {item.product_name} ({item.preferred_quantity or item.typical_quantity} stk)\n"
+
+            output += f"\n💡 View with 'generate_shopping_list' or add to cart with 'add_to_cart'!"
 
             return [TextContent(type="text", text=output)]
 

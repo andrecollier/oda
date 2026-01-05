@@ -24,6 +24,17 @@ Smart meal planning and grocery shopping tool for Oda.no using Claude Code.
 - **Cart Preview**: Open browser to visually see your Oda shopping cart
 - **Recipe Browser**: Browse Oda recipes with images and filters
 - **Recipe Details**: View individual recipes with full details and images
+- **Cookie-free Experience**: Automatic cookie popup removal for clean viewing
+
+### NEW! Faste Varer - Smart Innkjøp (v1.0)
+- **Bestillingshistorikk**: Scrape all orders from 2017 and analyze purchasing patterns
+- **AI-analyse**: Automatically identify regularly purchased items (milk, bread, toothpaste, etc.)
+- **Smart predikering**: Predict when items will run out based on:
+  - Your historical purchase frequency
+  - Product type (milk lasts shorter than toothpaste)
+  - Family size consumption patterns
+- **Low-stock varsler**: Get automatic warnings when items are running low
+- **Auto-add to list**: One-click to add recurring items to shopping list
 
 ### Budget Meal Planning
 Create affordable weekly meal plans with complete recipes:
@@ -165,6 +176,13 @@ The MCP server exposes these tools to Claude Code:
 - `preview_cart`: Open browser to visually see your shopping cart with all products and prices
 - `preview_recipes`: Open browser to browse Oda.no recipes page visually with filters
 - `preview_recipe`: Open browser to view a specific recipe with images and ingredients
+
+### Faste Varer - Recurring Items (NEW in v1.0!)
+- `scrape_order_history`: Scrape all historical orders from Oda account (back to 2017)
+- `analyze_recurring_items`: AI-analyze order history to identify regularly purchased items
+- `get_recurring_items`: View list of recurring items with purchase frequency
+- `get_low_stock_warnings`: Get items predicted to run out soon
+- `add_recurring_to_shopping_list`: Auto-add recurring items to current shopping list
 
 ## Optimization Features
 

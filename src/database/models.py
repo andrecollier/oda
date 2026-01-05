@@ -114,3 +114,82 @@ class SavedDeal(Base):
     valid_until = Column(DateTime)
 
     saved_at = Column(DateTime, default=datetime.utcnow)
+
+
+class Order(Base):
+    """Historical Oda orders from account/orders page."""
+
+    __tablename__ = "orders"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_number = Column(String, unique=True, nullable=False)  # Oda order reference number
+    order_date = Column(DateTime, nullable=False)
+    delivery_date = Column(DateTime)
+    total_price = Column(Float)
+
+    # Status tracking
+    status = Column(String)  # "delivered", "cancelled", etc.
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    # Relationships
+    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+
+class OrderItem(Base):
+    """Individual items in an order."""
+
+    __tablename__ = "order_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    order_id = Column(Integer, ForeignKey("orders.id"), nullable=False)
+
+    product_name = Column(String, nullable=False)
+    quantity = Column(Integer, default=1)
+    price_per_unit = Column(Float)
+    total_price = Column(Float)
+
+    # Product categorization for analysis
+    category = Column(String)  # "Dairy", "Bread", "Meat", etc.
+    is_recurring = Column(Boolean, default=False)  # Marked as recurring item
+
+    # For linking to current products
+    oda_product_url = Column(String)
+
+    # Relationships
+    order = relationship("Order", back_populates="items")
+
+
+class RecurringItem(Base):
+    """Items that are regularly purchased (faste varer)."""
+
+    __tablename__ = "recurring_items"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    product_name = Column(String, nullable=False, unique=True)
+
+    # Purchase frequency analysis
+    purchase_count = Column(Integer, default=0)  # How many times purchased total
+    first_purchase = Column(DateTime)
+    last_purchase = Column(DateTime)
+    avg_days_between_purchase = Column(Float)  # Average days between purchases
+
+    # Consumption estimation
+    typical_quantity = Column(Integer, default=1)  # Typical quantity per purchase
+    estimated_days_supply = Column(Integer)  # How many days this typically lasts
+
+    # Product info
+    category = Column(String)
+    oda_product_url = Column(String)
+    current_price = Column(Float)
+
+    # User preferences
+    auto_add_to_list = Column(Boolean, default=False)  # Auto-add to shopping list
+    preferred_quantity = Column(Integer, default=1)  # User's preferred quantity
+
+    # Predictions
+    next_predicted_purchase = Column(DateTime)  # When we predict they'll need this next
+    is_low_stock_warning = Column(Boolean, default=False)  # Currently running low
+
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

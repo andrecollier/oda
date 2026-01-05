@@ -33,6 +33,10 @@ class Recipe(BaseModel):
     protein_per_serving: float | None = None
     calories_per_serving: float | None = None
 
+    # Suggested pairings for meal planning
+    suggested_sides: list[str] = Field(default_factory=list)  # e.g., ["Poteter", "Ris", "Pasta"]
+    suggested_drinks: list[str] = Field(default_factory=list)  # e.g., ["Vann", "Melk", "Juice"]
+
     @property
     def is_family_friendly(self) -> bool:
         """Check if recipe is marked as family/child-friendly."""
@@ -83,6 +87,67 @@ class Recipe(BaseModel):
                     vegetables.append(veg)
                     break
         return list(set(vegetables))
+
+    def suggest_sides_and_drinks(self) -> dict[str, list[str]]:
+        """Generate intelligent suggestions for side dishes and drinks based on recipe content.
+
+        Returns:
+            Dictionary with 'sides' and 'drinks' keys containing suggested items
+        """
+        # Analyze recipe content
+        recipe_text = " ".join([
+            self.title,
+            self.description or "",
+            *[i.name for i in self.ingredients],
+            *self.categories,
+            *self.tags
+        ]).lower()
+
+        # Default suggestions
+        suggested_sides = []
+        suggested_drinks = []
+
+        # Carb detection - if recipe doesn't have carbs, suggest them
+        has_carbs = any(carb in recipe_text for carb in [
+            "ris", "pasta", "poteter", "potet", "brød", "loff", "nudler",
+            "quinoa", "bulgur", "couscous", "tortilla", "wrap"
+        ])
+
+        if not has_carbs:
+            # Suggest carbs based on meal type
+            if any(word in recipe_text for word in ["asiatisk", "wok", "curry", "thai", "kinesisk"]):
+                suggested_sides.extend(["Jasminris", "Nudler", "Nanbrød"])
+            elif any(word in recipe_text for word in ["italiensk", "middelhavet", "tomatsaus"]):
+                suggested_sides.extend(["Pasta", "Hvitløksbrød", "Focaccia"])
+            elif any(word in recipe_text for word in ["mexicansk", "taco", "burrito"]):
+                suggested_sides.extend(["Tortilla", "Nachos", "Ris"])
+            else:
+                suggested_sides.extend(["Kokte poteter", "Ris", "Pasta"])
+
+        # Vegetable/salad suggestions
+        has_salad = any(word in recipe_text for word in ["salat", "grønnsaksmiks", "agurkesalat"])
+        if not has_salad:
+            suggested_sides.extend(["Grønn salat", "Agurkesalat", "Ovnsbakte grønnsaker"])
+
+        # Sauce suggestions for dry proteins
+        if any(protein in recipe_text for protein in ["kylling", "kalkun", "svinekjøtt"]) and \
+           not any(sauce in recipe_text for sauce in ["saus", "curry", "stuing"]):
+            suggested_sides.extend(["Bearnaisesaus", "Tzatziki", "Aioli"])
+
+        # Drink suggestions based on meal type
+        if "barnevennlig" in recipe_text or "familie" in recipe_text:
+            suggested_drinks.extend(["Melk", "Vann", "Juice"])
+        else:
+            suggested_drinks.extend(["Vann", "Brus", "Vin (voksne)"])
+
+        # Dessert/fruit suggestion for family meals
+        if "barnevennlig" in recipe_text:
+            suggested_sides.append("Frukt til dessert")
+
+        return {
+            "sides": suggested_sides[:5],  # Limit to top 5
+            "drinks": suggested_drinks[:3]  # Limit to top 3
+        }
 
 
 class Deal(BaseModel):

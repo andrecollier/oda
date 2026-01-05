@@ -56,6 +56,42 @@ class OdaCartManager:
         if self.playwright:
             await self.playwright.stop()
 
+    async def _dismiss_cookie_popup(self):
+        """Dismiss cookie consent popup if present.
+
+        This is a reusable helper that can be called after page navigation
+        to ensure a clean user experience in preview mode.
+        """
+        if not self.page:
+            return
+
+        try:
+            # Common cookie popup selectors for Norwegian sites
+            cookie_selectors = [
+                'button:has-text("Godta alle")',
+                'button:has-text("Aksepter")',
+                'button:has-text("Jeg forstår")',
+                'button:has-text("OK")',
+                '[id*="cookie"] button:has-text("Accept")',
+                '[class*="cookie"] button',
+                '[data-testid*="cookie-accept"]',
+                '[aria-label*="cookie" i]',
+            ]
+
+            for selector in cookie_selectors:
+                try:
+                    button = await self.page.query_selector(selector)
+                    if button:
+                        await button.click()
+                        await self.page.wait_for_timeout(1000)
+                        print(f"✓ Dismissed cookie popup using selector: {selector}")
+                        return
+                except Exception:
+                    continue
+        except Exception as e:
+            # Not critical - just log and continue
+            print(f"Cookie popup dismissal attempt completed: {e}")
+
     async def login(self) -> bool:
         """Login to Oda.no.
 
@@ -72,6 +108,9 @@ class OdaCartManager:
             # Go directly to login page
             login_url = f"{self.BASE_URL}/user/login/"
             await self.page.goto(login_url, wait_until="networkidle")
+
+            # Dismiss cookie popup if present
+            await self._dismiss_cookie_popup()
 
             # Wait for login form (try multiple selectors)
             email_selectors = [
@@ -666,6 +705,9 @@ class OdaCartManager:
         # Navigate to cart
         cart_url = f"{self.BASE_URL}/cart/"
         await self.page.goto(cart_url, wait_until="networkidle")
+
+        # Dismiss cookie popup for clean preview
+        await self._dismiss_cookie_popup()
 
         if pause:
             # Open Playwright Inspector and pause
