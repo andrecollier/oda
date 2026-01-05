@@ -182,11 +182,18 @@ class OdaRecipeScraper:
         recipe_links = await self.page.locator('a[href*="/recipes/"]').all()
         urls = []
 
-        for link in recipe_links[:limit]:
+        for link in recipe_links[:limit * 2]:  # Get more to filter out plans/categories
             href = await link.get_attribute("href")
             if href and href not in urls:
+                # SKIP plans/categories - only want actual recipes
+                if "/plans/" in href or "/categories/" in href:
+                    continue
+
                 full_url = urljoin(self.BASE_URL, href)
                 urls.append(full_url)
+
+                if len(urls) >= limit:
+                    break
 
         return urls
 
@@ -220,37 +227,65 @@ class OdaRecipeScraper:
             desc_element = await self.page.query_selector("p.description, .recipe-description")
             description = await desc_element.inner_text() if desc_element else None
 
-            # Extract ingredients
+            # Extract ingredients from accordion table
             ingredients = []
-            ingredient_elements = await self.page.query_selector_all(
-                '.ingredient-list li, [class*="ingredient"]'
-            )
 
-            for elem in ingredient_elements:
-                text = await elem.inner_text()
-                # Try to find product link
-                link = await elem.query_selector("a")
-                product_url = await link.get_attribute("href") if link else None
+            # Find the ingredients accordion
+            accordion = await self.page.query_selector('[data-test-id="accordion-ingredients"]')
 
-                ingredients.append(
-                    RecipeIngredient(
-                        name=text.strip(),
-                        product_url=urljoin(self.BASE_URL, product_url)
-                        if product_url
-                        else None,
-                    )
-                )
+            if accordion:
+                # Open the accordion by clicking it (it's a details element)
+                summary = await accordion.query_selector('summary')
+                if summary:
+                    await summary.click()
+                    await self.page.wait_for_timeout(500)  # Wait for accordion to open
+
+                # Find all table rows
+                rows = await accordion.query_selector_all('tr')
+
+                for row in rows:
+                    # Get all td elements in this row
+                    cells = await row.query_selector_all('td')
+
+                    if len(cells) >= 2:
+                        # First cell has quantity, second has name
+                        quantity_elem = await cells[0].query_selector('span')
+                        name_elem = await cells[1].query_selector('span.k-text-style--body-m')
+
+                        if name_elem:
+                            quantity_text = await quantity_elem.inner_text() if quantity_elem else ""
+                            name_text = await name_elem.inner_text()
+
+                            # Combine quantity and name
+                            full_text = f"{quantity_text} {name_text}".strip() if quantity_text else name_text.strip()
+
+                            # Try to find product link in the name cell
+                            link = await cells[1].query_selector("a")
+                            product_url = await link.get_attribute("href") if link else None
+
+                            if full_text and not full_text.startswith("Foto"):  # Skip non-ingredient rows
+                                ingredients.append(
+                                    RecipeIngredient(
+                                        name=full_text,
+                                        product_url=urljoin(self.BASE_URL, product_url)
+                                        if product_url
+                                        else None,
+                                    )
+                                )
 
             # Extract instructions
             instructions = []
             instruction_elements = await self.page.query_selector_all(
-                '.instructions li, .steps li, [class*="instruction"]'
+                '[class*="instructionContainer"]'
             )
 
             for elem in instruction_elements:
-                text = await elem.inner_text()
-                if text.strip():
-                    instructions.append(text.strip())
+                # Find the paragraph with instruction text
+                p_elem = await elem.query_selector('p')
+                if p_elem:
+                    text = await p_elem.inner_text()
+                    if text.strip():
+                        instructions.append(text.strip())
 
             # Extract metadata
             servings = 4  # Default

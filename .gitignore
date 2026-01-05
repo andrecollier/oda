@@ -46,3 +46,29 @@ trace.zip
 # OS
 .DS_Store
 Thumbs.db
+
+# Debug and test files
+debug_*.py
+test_*.py
+*_debug.py
+inspect_*.py
+manual_*.py
+
+# Screenshots and images
+*.png
+*.jpg
+*.jpeg
+
+# Temporary HTML/text dumps
+oda_*.html
+oda_*.txt
+recipe_page.html
+
+# Temporary JSON data
+shopping_selections.json
+handlekurv_forslag.json
+cart_products.json
+
+# Logs
+*.log
+/tmp/

@@ -6,11 +6,12 @@ Smart meal planning and grocery shopping tool for Oda.no using Claude Code.
 
 ### Core Features
 - **Recipe Discovery**: Search Oda.no for family-friendly, high-protein, meal-prep, **quick & easy** recipes
+- **Budget Meal Planning** (NEW!): Create affordable weekly meal plans (~750 kr for 4 dinners)
 - **Smart Meal Planning**: Optimize weekly meal plans to maximize ingredient reuse (especially vegetables)
 - **Product Search**: Search for products with filtering by price, nutrition, allergens
 - **Deal Finder**: Automatically find products on sale
 - **Shopping List**: Generate consolidated shopping lists from meal plans
-- **Cart Management**: Add products to Oda.no cart with checkout guardrail
+- **Cart Management**: Add products to Oda.no cart with automated cleanup and optimization
 
 ### NEW! Favorites & History
 - **Save Favorites**: Mark recipes you love to easily find them again
@@ -23,6 +24,18 @@ Smart meal planning and grocery shopping tool for Oda.no using Claude Code.
 - **Cart Preview**: Open browser to visually see your Oda shopping cart
 - **Recipe Browser**: Browse Oda recipes with images and filters
 - **Recipe Details**: View individual recipes with full details and images
+
+### Budget Meal Planning
+Create affordable weekly meal plans with complete recipes:
+- **4 Budget Dinners**: ~750 kr total (~47 kr/portion)
+  - Spaghetti Bolognese (30 min, ~180 kr)
+  - Chili sin carne - vegetarian (35 min, ~120 kr)
+  - Kjøttboller med pasta (40 min, ~180 kr)
+  - Pølse- og potetgryte (45 min, ~150 kr)
+- **Automated Shopping**: Generate shopping list from recipes
+- **Smart Cart Management**: Remove wrong products, avoid expensive variants
+- **Batch Cooking Tips**: Save time and money with meal prep
+- **Weekly Menu Suggestions**: Optimize meal order throughout the week
 
 ## Architecture
 

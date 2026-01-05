@@ -83,3 +83,58 @@ class Recipe(BaseModel):
                     vegetables.append(veg)
                     break
         return list(set(vegetables))
+
+
+class Deal(BaseModel):
+    """Oda weekly deal/discount."""
+
+    product_name: str
+    product_url: str
+    original_price: float
+    sale_price: float
+    discount_type: str  # "percentage", "2-for-1", "3-for-1", "3-for-2", "fixed"
+    discount_value: float  # 30.0 for 30%, 2.0 for 2-for-1
+    valid_until: str | None = None
+    image_url: str | None = None
+
+    @property
+    def savings_amount(self) -> float:
+        """Calculate savings amount in kr."""
+        return self.original_price - self.sale_price
+
+    @property
+    def savings_percentage(self) -> float:
+        """Calculate savings percentage."""
+        if self.original_price > 0:
+            return (self.savings_amount / self.original_price) * 100
+        return 0.0
+
+
+class ProductAlternative(BaseModel):
+    """Alternative product option for an ingredient."""
+
+    name: str
+    price: float
+    unit_price: float | None = None  # kr/kg
+    unit_price_text: str | None = None  # "kr 19.90/kg"
+    product_url: str
+    is_on_deal: bool = False
+    deal_info: Deal | None = None
+
+    # Quality indicators
+    is_bulk: bool = False  # "pose", "løsvekt"
+    is_precut: bool = False  # "kuttet", "ferdig"
+
+    @property
+    def savings_percentage(self) -> float:
+        """Calculate savings percentage if on deal."""
+        if self.deal_info:
+            return self.deal_info.savings_percentage
+        return 0.0
+
+    @property
+    def savings_amount(self) -> float:
+        """Calculate savings amount if on deal."""
+        if self.deal_info:
+            return self.deal_info.savings_amount
+        return 0.0
